@@ -7,3 +7,4 @@ authors = ["Dustin Bensing <dustin.bensing@googlemail.com>"]
 orbclient = "0.3.12"
 orbimage = "0.1.15"
 stdsimd = { git = "https://github.com/rust-lang-nursery/stdsimd" }
+time = "0.1.38"
