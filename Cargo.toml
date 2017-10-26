@@ -8,3 +8,6 @@ orbclient = "0.3.12"
 orbimage = "0.1.15"
 stdsimd = { git = "https://github.com/rust-lang-nursery/stdsimd" }
 time = "0.1.38"
+
+[profile.release]
+debug = true
