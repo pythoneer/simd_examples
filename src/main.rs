@@ -187,8 +187,8 @@ fn main() {
                 let dst_hi_16 = vendor::_mm_unpackhi_epi8(dst_pixels, zero);
                 let color_16 = vendor::_mm_unpacklo_epi8(transmute::<u32x4, i8x16>(color), zero);
 
-                let alpha = vendor::_mm_shufflelo_epi16(transmute::<i8x16, i16x8>(color_16), 0x02020202);
-                let alpha = vendor::_mm_shufflehi_epi16(alpha, 0x02020202);
+                let alpha = vendor::_mm_shufflelo_epi16(transmute::<i8x16, i16x8>(color_16), 0b11111111);
+                let alpha = vendor::_mm_shufflehi_epi16(alpha, 0b11111111);
 
                 let calpha = vendor::_mm_sub_epi16(ones, alpha);
                 let mdst_lo_16 = vendor::_mm_mullo_epi16(transmute::<i8x16, i16x8>(dst_lo_16), calpha);
