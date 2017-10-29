@@ -64,11 +64,16 @@ fn main() {
             };
         }
 
+        //copy original image
+        raw_image_data.clone_into(&mut new_image_data);
+
         let start = PreciseTime::now();
 
         //todo: do cool stuff here
+        fade_slow(&mut new_image_data, 100);
+//        fade_sse(&mut new_image_data, 100);
 //        tint2(raw_image_data, &mut new_image_data, &td);
-        tint_sse(raw_image_data, &mut new_image_data, &td);
+//        tint_sse(raw_image_data, &mut new_image_data, &td);
 
         let end = PreciseTime::now();
         if fcnt % 100 == 0 {
@@ -77,6 +82,53 @@ fn main() {
 
         orb_window.image(0, 0, width, height, &new_image_data);
         orb_window.sync();
+    }
+
+    fn color_as_simd(x: &mut [Color]) -> &mut [i8x16] {
+        unsafe {
+            let len = x.len();
+            let y = transmute::<&mut[Color], &mut[i8x16]>(x);
+            slice::from_raw_parts_mut(y.as_mut_ptr(), len / 4)
+        }
+    }
+
+    #[inline(never)]
+    fn fade_slow(new_image_data: &mut [Color], alpha: u8) {
+
+        for pixel in new_image_data.iter_mut() {
+
+            *pixel = Color::rgb(
+                ((pixel.r() as u16 * alpha as u16) / 256) as u8,
+                ((pixel.g() as u16 * alpha as u16) / 256) as u8,
+                ((pixel.b() as u16 * alpha as u16) / 256) as u8,
+            );
+        }
+    }
+
+    #[inline(never)]
+    fn fade_sse(new_image_date: &mut [Color], alpha: u8) {
+        use stdsimd::vendor;
+
+        unsafe {
+            let alpha16 = vendor::_mm_set1_epi16(alpha as i16);
+            let zero16 = vendor::_mm_setzero_si128();
+
+            let as_packed_pixels = color_as_simd(new_image_date);
+            for pixel_pack in as_packed_pixels.iter_mut() {
+
+                let src_pixels = vendor::_mm_load_si128(pixel_pack);
+                let src_lo_16 = vendor::_mm_unpacklo_epi8(src_pixels, zero16);
+                let src_hi_16 = vendor::_mm_unpackhi_epi8(src_pixels, zero16);
+
+                let mul_lo_16 = vendor::_mm_mullo_epi16(transmute::<i8x16, i16x8>(src_lo_16), alpha16);
+                let mul_hi_16 = vendor::_mm_mullo_epi16(transmute::<i8x16, i16x8>(src_hi_16), alpha16);
+                let result_lo_16 = vendor::_mm_srli_epi16(mul_lo_16, 8);
+                let result_hi_16 = vendor::_mm_srli_epi16(mul_hi_16, 8);
+
+                let packed_result = vendor::_mm_packus_epi16(result_lo_16, result_hi_16);
+                vendor::_mm_store_si128(pixel_pack, transmute::<u8x16, i8x16>(packed_result));
+            }
+        }
     }
 
     #[inline(never)]
@@ -105,13 +157,7 @@ fn main() {
 //        slice::from_raw_parts(x, x.len() / 4)
 //    }
 
-    fn color_as_simd(x: &mut [Color]) -> &mut [i8x16] {
-        unsafe {
-            let len = x.len();
-            let y = transmute::<&mut[Color], &mut[i8x16]>(x);
-            slice::from_raw_parts_mut(y.as_mut_ptr(), len / 4)
-        }
-    }
+
 
     #[inline(never)]
     fn tint_sse(raw_image_data: &mut [Color], new_image_data: &mut Vec<Color>, td: &TintData) {
