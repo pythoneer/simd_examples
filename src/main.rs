@@ -32,7 +32,7 @@ fn main() {
     let mut basepath = "";
 
     let mut orb_window = orbclient::Window::new_flags(100, 100, width, height, title, &flags).unwrap();
-    let mut image = Image::from_path(basepath.to_string() + "/home/naikon/Documents/dev/git-repos/simd_examples/assets/cat_big.jpg").unwrap();
+    let mut image = Image::from_path(basepath.to_string() + "assets/cat_big.jpg").unwrap();
 
     let td = TintData{
         tint_a: 100,
