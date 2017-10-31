@@ -32,7 +32,7 @@ fn main() {
     let mut basepath = "";
 
     let mut orb_window = orbclient::Window::new_flags(100, 100, width, height, title, &flags).unwrap();
-    let mut image = Image::from_path(basepath.to_string() + "assets/cat_big.jpg").unwrap();
+    let mut image = Image::from_path(basepath.to_string() + "/home/naikon/Documents/dev/git-repos/simd_examples/assets/cat_big.jpg").unwrap();
 
     let td = TintData{
         tint_a: 100,
@@ -40,6 +40,8 @@ fn main() {
         tint_g: 0,
         tint_b: 0,
     };
+
+    let tint_color = Color::rgba(255, 0, 0, 100);
 
     let raw_image_data = image.data_mut();
     let mut new_image_data:Vec<Color> = vec![Color::rgba(0,0,0,0); raw_image_data.len()];
@@ -70,10 +72,11 @@ fn main() {
         let start = PreciseTime::now();
 
         //todo: do cool stuff here
-        fade_slow(&mut new_image_data, 100);
+//        fade_slow(&mut new_image_data, 100);
 //        fade_sse(&mut new_image_data, 100);
 //        tint2(raw_image_data, &mut new_image_data, &td);
 //        tint_sse(raw_image_data, &mut new_image_data, &td);
+        tint_precompute_sse(&mut new_image_data, &tint_color);
 
         let end = PreciseTime::now();
         if fcnt % 100 == 0 {
@@ -106,14 +109,14 @@ fn main() {
     }
 
     #[inline(never)]
-    fn fade_sse(new_image_date: &mut [Color], alpha: u8) {
+    fn fade_sse(new_image_data: &mut [Color], alpha: u8) {
         use stdsimd::vendor;
 
         unsafe {
             let alpha16 = vendor::_mm_set1_epi16(alpha as i16);
             let zero16 = vendor::_mm_setzero_si128();
 
-            let as_packed_pixels = color_as_simd(new_image_date);
+            let as_packed_pixels = color_as_simd(new_image_data);
             for pixel_pack in as_packed_pixels.iter_mut() {
 
                 let src_pixels = vendor::_mm_load_si128(pixel_pack);
@@ -206,4 +209,41 @@ fn main() {
             }
         }
     }
+
+    #[inline(never)]
+    fn tint_precompute_sse(new_image_data: &mut [Color], tint_color: &Color) {
+        use stdsimd::vendor;
+
+        unsafe {
+            let zero_16 = vendor::_mm_setzero_si128();
+            let alpha_16 = vendor::_mm_set1_epi16(tint_color.a() as i16);
+            let ones_16 = vendor::_mm_set1_epi16(0x00FF);
+            let complement_alpha_16 = vendor::_mm_sub_epi16(ones_16, alpha_16);
+            let mut pre_color_tmp = vendor::_mm_set1_epi32(tint_color.data as i32);
+
+            pre_color_tmp = transmute::<i8x16, i32x4>(vendor::_mm_unpacklo_epi8(transmute::<i32x4, i8x16>(pre_color_tmp), zero_16));
+            pre_color_tmp = transmute::<i16x8, i32x4>(vendor::_mm_mullo_epi16(transmute::<i32x4, i16x8>(pre_color_tmp), alpha_16));
+            pre_color_tmp = transmute::<i16x8, i32x4>(vendor::_mm_srli_epi16(transmute::<i32x4, i16x8>(pre_color_tmp), 8));
+            let pre_color = vendor::_mm_packus_epi16(transmute::<i32x4, i16x8>(pre_color_tmp), transmute::<i32x4, i16x8>(pre_color_tmp));
+
+            let as_packed_pixels = color_as_simd(new_image_data);
+            for pixel_pack in as_packed_pixels.iter_mut() {
+
+                let dst_pixels = vendor::_mm_load_si128(pixel_pack);
+                let dst_lo_16 = vendor::_mm_unpacklo_epi8(dst_pixels, zero_16);
+                let dst_hi_16 = vendor::_mm_unpackhi_epi8(dst_pixels, zero_16);
+
+                let mul_lo_16 = vendor::_mm_mullo_epi16(transmute::<i8x16, i16x8>(dst_lo_16), complement_alpha_16);
+                let mul_hi_16 = vendor::_mm_mulhi_epi16(transmute::<i8x16, i16x8>(dst_hi_16), complement_alpha_16);
+
+                let shift_lo_16 = vendor::_mm_srli_epi16(mul_lo_16, 8);
+                let shift_hi_16 = vendor::_mm_srli_epi16(mul_hi_16, 8);
+
+                let packed = vendor::_mm_packus_epi16(shift_lo_16, shift_hi_16);
+                let result = vendor::_mm_add_epi8(transmute::<u8x16, i8x16>(packed), transmute::<u8x16, i8x16>(pre_color));
+                vendor::_mm_store_si128(pixel_pack, result);
+            }
+        }
+    }
+
 }
